@@ -1,7 +1,7 @@
 # LAB-NOTE-XXX: <short title>
 
 **Date:**
-**Stage:** (Foundation / Detection / Automation / Intelligence / AI-SOC / Engineering)
+**Stage:** (Foundation / Telemetry / Detection / Automation)
 **Author:** Rajrishi
 
 ## Objective
@@ -20,7 +20,7 @@ Numbered steps, exact commands. Enough detail to reproduce without guessing.
 What actually happened. Raw, unfiltered — include command output, not just a summary.
 
 ## Evidence
-Links to screenshots (`screenshots/...`), raw JSON, log excerpts, pcaps, etc. Evidence lives in the repo, not just in this description.
+Small raw JSON excerpts, focused log output, or a screenshot when it clarifies the result. Keep evidence small and redact secrets.
 
 ## Result
 Did the hypothesis hold? Be specific about what worked and what didn't.

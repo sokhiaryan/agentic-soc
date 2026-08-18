@@ -11,10 +11,12 @@ postman/wazuh-api/environment.json
 
 # --- Docker / Wazuh / n8n runtime data ---
 infrastructure/wazuh/config/wazuh_indexer_ssl_certs/
+infrastructure/wazuh/wazuh-docker/
 infrastructure/**/data/
 infrastructure/**/*.log
 n8n_data/
 wazuh-*-data/
+wazuh-agent_*.deb
 
 # --- Python ---
 __pycache__/

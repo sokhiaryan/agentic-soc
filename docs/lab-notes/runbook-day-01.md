@@ -1,163 +1,80 @@
-# Day 1 Runbook — Foundation + Wazuh
+# Lab Runbook — Agent Telemetry, Atomic Test, and n8n
 
-Run this on the machine that will host the lab (native Linux, WSL2 on Windows with Docker Desktop, or a cloud VPS — anything Debian/Ubuntu-based with 4+ CPU cores, 8+ GB RAM, 50+ GB free disk). Do this on your own machine/terminal, not inside a chat tool — paste outputs back into `LAB-NOTE-001` and `LAB-NOTE-002` as you go.
+This runbook assumes the Wazuh Docker stack is healthy and an Ubuntu Wazuh agent has already been deployed.
 
-## 0. Create the repo
+## 1. Confirm the agent is active
 
-```bash
-git init agentic-soc && cd agentic-soc
-# (or: unzip the scaffold you were given, then `cd agentic-soc && git init`)
-git add README.md .gitignore LICENSE docs
-git commit -m "chore: initialize security operations lab"
-git add docs/ROADMAP.md
-git commit -m "docs: define lab architecture and objectives"
-```
+In Wazuh Dashboard, open **Endpoint Security → Agents**. Confirm the Ubuntu endpoint is **Active** before continuing.
 
-## 1. Install prerequisites
+On the endpoint:
 
 ```bash
-# Docker Engine + Compose plugin (Ubuntu/Debian)
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker $USER   # log out/in (or `newgrp docker`) to apply
-
-sudo apt-get update && sudo apt-get install -y git curl jq
+sudo systemctl --no-pager --full status wazuh-agent
+sudo tail -n 50 /var/ossec/logs/ossec.log
 ```
-Install Postman separately (desktop app or `snap install postman`).
 
-Log out and back in (or open a new shell) so the `docker` group membership takes effect, then verify:
+Start a new note named `docs/lab-notes/LAB-NOTE-003-agent-audit-atomic.md` using `TEMPLATE.md`. Record the host name, Wazuh agent version, manager address, and this status output.
+
+## 2. Enable auditd telemetry
+
+This installs `auditd`, enables a narrowly scoped audit rule for command execution by normal users, configures the Wazuh agent to ingest `/var/log/audit/audit.log`, and restarts the agent.
 
 ```bash
-docker version
-docker compose version
-uname -a
-free -h
-lsblk
-df -h
-git --version
+cd /home/sokhi/Desktop/agentic-soc
+./scripts/enable-auditd.sh
+sudo auditctl -l | grep audit-wazuh-c
+sudo systemctl --no-pager --full status auditd wazuh-agent
 ```
 
-Fill these results into `docs/lab-notes/LAB-NOTE-001-environment-baseline.md`, then:
+Wait one or two minutes, then search Wazuh Threat Hunting for `audit-wazuh-c` or the endpoint agent name. Paste the audit-rule output and a small matching alert JSON excerpt into LAB-NOTE-003.
+
+## 3. Start n8n in a second terminal
+
+n8n can install while audit telemetry is flowing. It remains bound to localhost.
 
 ```bash
-git add docs/lab-notes/LAB-NOTE-001-environment-baseline.md
-git commit -m "feat: provision docker environment"
+cd /home/sokhi/Desktop/agentic-soc
+./scripts/bootstrap-n8n.sh
+docker compose -f infrastructure/n8n/compose.yaml ps
 ```
 
-## 2. Set the kernel parameter Wazuh's indexer needs
+Open `http://127.0.0.1:5678` and create the owner account. Record the n8n image/version and service status in LAB-NOTE-003. Do not commit `infrastructure/n8n/.env`.
+
+## 4. Install PowerShell and prepare Atomic Red Team
 
 ```bash
-sudo sysctl -w vm.max_map_count=262144
-# persist across reboots:
-echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
+cd /home/sokhi/Desktop/agentic-soc
+./scripts/install-powershell-ubuntu.sh
+pwsh -NoLogo -File tests/atomic/prepare-atomic-red-team.ps1
 ```
-(The Wazuh indexer, built on OpenSearch, creates many virtual memory areas and needs this raised above the Linux default of 65530.)
 
-## 3. Deploy Wazuh single-node (Docker)
+The preparation script installs the PowerShell execution module for the current user and downloads only the Atomic test-definition tree. It does not execute any test.
 
-Deploy the **official** repo rather than a copied compose file:
+## 5. Preview, then run one reviewed Atomic test
+
+Start with Unix Shell (`T1059.004`) test 8, the small command-line-script test that prints five messages and does not download content or require elevation. The first command is preview-only. Read the displayed commands and dependencies before running anything.
 
 ```bash
-git clone https://github.com/wazuh/wazuh-docker.git -b v4.14.7
-cd wazuh-docker/single-node/
+cd /home/sokhi/Desktop/agentic-soc
+pwsh -NoLogo -File tests/atomic/run-atomic-test.ps1 -Technique T1059.004 -TestNumber 8
 ```
 
-From here, follow the official current instructions exactly (they include a certificate-generation step and the `docker compose up -d` command) — copy-paste directly from the doc page rather than from memory, since exact command syntax has changed between Wazuh versions:
-
-- https://documentation.wazuh.com/current/deployment-options/docker/wazuh-container.html
-
-Expect roughly this shape, but confirm against the page above before running:
+If the preview is acceptable for this private lab, execute it explicitly:
 
 ```bash
-# generate certs for inter-node TLS
-docker compose -f generate-indexer-certs.yml run --rm generator
-
-# start the stack
-docker compose up -d
-
-# watch it come up
-docker compose ps
-docker compose logs -f
+ATOMIC_LAB_APPROVED=YES pwsh -NoLogo -File tests/atomic/run-atomic-test.ps1 -Technique T1059.004 -TestNumber 8 -Execute
 ```
 
-Default exposed ports:
-
-| Port | Service |
-|---|---|
-| 443 | Wazuh dashboard (HTTPS) |
-| 55000 | Wazuh manager REST API |
-| 9200 | Wazuh indexer API |
-| 1514 / 1515 | Agent enrollment / event forwarding (TCP) |
-| 514 | Syslog (UDP) |
-
-Log into the dashboard at `https://<host>` — default is `admin` / the password set during cert generation (check the compose file / `.env` in `single-node/` for the exact variable, e.g. `INDEXER_PASSWORD` / `DASHBOARD_PASSWORD` — **change these from the repo defaults before this ever touches a real network**).
-
-Once it's up:
+Search the Wazuh dashboard for the endpoint name and `audit-wazuh-c`. Capture the atomic test command, timestamp, Wazuh rule ID/level, and a short alert JSON excerpt in LAB-NOTE-003. Run the test cleanup only if the preview documents cleanup behavior:
 
 ```bash
-cd ../..   # back to agentic-soc/
-git add infrastructure/wazuh
-git commit -m "feat: deploy wazuh single-node environment"
+ATOMIC_LAB_APPROVED=YES pwsh -NoLogo -File tests/atomic/run-atomic-test.ps1 -Technique T1059.004 -TestNumber 8 -Execute -Cleanup
 ```
 
-(Only commit your own compose overrides/config here, not the cloned `wazuh-docker` repo itself or the generated certs — both should stay out of git; see `.gitignore`.)
-
-## 4. Understand the architecture before moving on
-
-Read (or re-read) what each component does, then write it in your own words in `docs/architecture/wazuh-architecture.png`'s accompanying notes:
-
-- **Manager** — detection/management layer: rules, decoders, correlation, MITRE mapping.
-- **Indexer** — storage/search layer (OpenSearch-based).
-- **Dashboard** — the analyst-facing UI.
-- **Agent** — endpoint telemetry collector (next step).
+## 6. Commit today's reproducible work
 
 ```bash
-git add docs/architecture
-git commit -m "docs: document wazuh architecture"
+cd /home/sokhi/Desktop/agentic-soc
+git add README.md .gitignore docs infrastructure/n8n scripts tests/atomic
+git commit -m "feat: add auditd, atomic testing, and n8n lab setup"
 ```
-
-## 5. Install the local agent and get first telemetry
-
-Follow the Wazuh dashboard's "Add agent" wizard (Endpoint Security → Agents → Deploy new agent) — it generates the exact install command for your OS. On the same Ubuntu host (or a second VM), install it, start it, and confirm it shows "Active" in the dashboard.
-
-Then generate some real events to see telemetry actually flow:
-
-```bash
-# a few harmless but loggable actions
-sudo -i    # then exit immediately — generates a sudo/auth event
-ssh localhost   # if sshd is running — generates an SSH auth event (Ctrl+C to cancel)
-touch /etc/test-fim-file && sudo rm /etc/test-fim-file   # if FIM is watching /etc
-```
-
-In the dashboard, find the resulting alert(s), open one, and copy its raw JSON.
-
-```bash
-git add docs/wazuh docs/lab-notes
-git commit -m "feat: validate endpoint telemetry"
-```
-
-## 6. Write LAB-NOTE-002 and the event anatomy doc
-
-Use `docs/lab-notes/TEMPLATE.md` to write `LAB-NOTE-002-wazuh-deployment.md` (objective: understand the manager/indexer/dashboard split and confirm agent → manager telemetry flow).
-
-Then create `docs/wazuh/event-anatomy.md`: paste one real alert JSON and annotate every field (`timestamp`, `agent.id/name/ip`, `rule.id/level/description`, `data.*`) in your own words.
-
-```bash
-git add docs/wazuh/event-anatomy.md docs/lab-notes
-git commit -m "docs: analyze wazuh event schema"
-```
-
-## End of Day 1 checklist
-
-- [ ] Repo initialized with Stage 0 scaffold
-- [ ] Docker + Compose + Git + jq + Postman installed, versions recorded
-- [ ] `vm.max_map_count` set
-- [ ] Wazuh single-node stack deployed and reachable at `https://<host>`
-- [ ] Default dashboard/indexer passwords changed from repo defaults
-- [ ] Local agent installed and showing Active
-- [ ] At least one real alert captured as raw JSON
-- [ ] `LAB-NOTE-001` and `LAB-NOTE-002` written
-- [ ] `docs/wazuh/event-anatomy.md` written
-- [ ] Everything committed with the message sequence above
-
-Next: Day 2 (Postman + the Wazuh API arc) — start with `POST /security/user/authenticate` against port 55000 and build out `docs/api/wazuh-api-notes.md` endpoint by endpoint.

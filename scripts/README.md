@@ -1,3 +1,3 @@
 # scripts/
 
-Supporting Python/bash scripts — the "curl / Python" rungs of the learning progression documented in `docs/api/wazuh-api-notes.md` (Dashboard → API → Postman → curl → Python → n8n), plus any one-off lab setup or evidence-collection helpers.
+Repeatable shell helpers for Docker, Wazuh, n8n, auditd, and PowerShell setup. Read each script before running it; host-changing scripts require `sudo` and Atomic Red Team helpers require explicit execution approval.
