@@ -1,0 +1,44 @@
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+**/config/*secret*
+**/*.pem
+**/*.key
+**/certs/
+postman/wazuh-api/environment.json
+!postman/wazuh-api/environment.example.json
+
+# --- Docker / Wazuh / n8n runtime data ---
+infrastructure/wazuh/config/wazuh_indexer_ssl_certs/
+infrastructure/**/data/
+infrastructure/**/*.log
+n8n_data/
+wazuh-*-data/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# --- Node / n8n ---
+node_modules/
+npm-debug.log*
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Large/binary evidence you don't want bloating git history ---
+*.pcap
+*.mem
+*.img
+
+# --- Incident working files that may contain sensitive lab data ---
+incidents/**/raw/

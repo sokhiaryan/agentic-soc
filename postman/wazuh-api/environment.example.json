@@ -1,0 +1,10 @@
+{
+  "id": "agentic-soc-env-template",
+  "name": "Agentic SOC - Wazuh API (template)",
+  "values": [
+    { "key": "base_url", "value": "https://localhost:55000", "enabled": true },
+    { "key": "username", "value": "wazuh-wui", "enabled": true },
+    { "key": "password", "value": "CHANGE_ME", "enabled": true },
+    { "key": "token", "value": "", "enabled": true }
+  ]
+}
